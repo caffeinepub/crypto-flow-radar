@@ -138,7 +138,6 @@ export interface ImpulseEvent {
 }
 export interface backendInterface {
     addAlert(alertType: string, threshold: Float, note: string): Promise<bigint>;
-    auth(caller: Uint8Array): Promise<void>;
     deleteAlert(id: bigint): Promise<boolean>;
     fetchDataCycle(): Promise<void>;
     getAlertTriggers(limit: bigint): Promise<Array<AlertTrigger>>;
@@ -161,6 +160,7 @@ export interface backendInterface {
     getSynchronizedImpulseEvents(limit: bigint): Promise<Array<SynchronizedImpulseEvent>>;
     getVolumeMetrics(): Promise<Array<VolumeMetric>>;
     init(): Promise<void>;
+    isLiveData(): Promise<boolean>;
     startDataFetching(): Promise<void>;
     transformHttpResponse(input: TransformationInput): Promise<TransformationOutput>;
     triggerManualRefresh(): Promise<string>;

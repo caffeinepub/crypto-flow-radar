@@ -1,23 +1,25 @@
-import Array "mo:core/Array";
-import Time "mo:core/Time";
-import Text "mo:core/Text";
-import Float "mo:core/Float";
+
 import List "mo:core/List";
 import Map "mo:core/Map";
+import Runtime "mo:core/Runtime";
+import Text "mo:core/Text";
+import Time "mo:core/Time";
+import Iter "mo:core/Iter";
+import Order "mo:core/Order";
+import Float "mo:core/Float";
+import Array "mo:core/Array";
 import Int "mo:core/Int";
 import Nat "mo:core/Nat";
-import Blob "mo:core/Blob";
-import Iter "mo:core/Iter";
+import Char "mo:core/Char";
 import Timer "mo:core/Timer";
-import Migration "migration";
-import Runtime "mo:core/Runtime";
-import Order "mo:core/Order";
 import OutCall "http-outcalls/outcall";
+import Blob "mo:core/Blob";
 
-(with migration = Migration.run)
+
 actor {
   // Types
   type Float = Float.Float;
+  type Timestamp = Int;
   type MarketSnapshot = {
     timestamp : Int;
     exchange : Text;
@@ -154,10 +156,13 @@ actor {
   // Persistent Stores
   var nextAlertId = 1;
   var nextEventId = 1;
+  var hasLiveData = false;
+  var lastBinancePrice : Float = 0.0;
+  var lastFundingRate : Float = 0.0;
+  var lastOpenInterest : Float = 0.0;
 
   let alerts = List.empty<Alert>();
   let alertTriggers = List.empty<AlertTrigger>();
-
   let marketSnapshots = Map.empty<Text, List.List<MarketSnapshot>>();
   let exchangeFlows = List.empty<ExchangeFlow>();
   let orderBookDepths = List.empty<OrderBookDepth>();
@@ -186,26 +191,12 @@ actor {
     Int.compare(a.timestamp, b.timestamp);
   };
 
-  public query ({ caller }) func auth(caller : Blob) : async () {
-    if (caller.size() == 0) {
-      Runtime.trap("Unauthorized");
-    };
+  // Data Refresh
+  public func isLiveData() : async Bool {
+    hasLiveData;
   };
 
-  // Query functions
-  public query ({ caller }) func getLatestPrices() : async [(Text, Float)] {
-    let exchanges = marketSnapshots.keys().toArray();
-    let prices = exchanges.map(
-      func(exchange) {
-        switch (getLatestSnapshotSync(exchange)) {
-          case (null) { (exchange, 0.0) };
-          case (?snapshot) { (exchange, snapshot.price) };
-        };
-      }
-    );
-    prices;
-  };
-
+  // Market Data
   func getLatestSnapshotSync(exchange : Text) : ?MarketSnapshot {
     switch (marketSnapshots.get(exchange)) {
       case (null) { null };
@@ -217,6 +208,19 @@ actor {
         };
       };
     };
+  };
+
+  public func getLatestPrices() : async [(Text, Float)] {
+    let exchanges = marketSnapshots.keys().toArray();
+    let prices = exchanges.map(
+      func(exchange) {
+        switch (getLatestSnapshotSync(exchange)) {
+          case (null) { (exchange, 0.0) };
+          case (?snapshot) { (exchange, snapshot.price) };
+        };
+      }
+    );
+    prices;
   };
 
   public query ({ caller }) func getPriceHistory(exchange : Text, limit : Nat) : async [MarketSnapshot] {
@@ -235,6 +239,23 @@ actor {
     };
   };
 
+  // Funding Rates
+  func getLatestFundingRateSync(exchange : Text) : Float {
+    switch (marketSnapshots.get(exchange)) {
+      case (null) { 0.0 };
+      case (?buffer) {
+        if (buffer.size() > 0) {
+          switch (buffer.last()) {
+            case (null) { 0.0 };
+            case (?snapshot) { snapshot.fundingRate };
+          };
+        } else {
+          0.0;
+        };
+      };
+    };
+  };
+
   public query ({ caller }) func getFundingRates() : async [(Text, Float)] {
     let exchanges = marketSnapshots.keys().toArray();
     let rates = exchanges.map(
@@ -245,14 +266,15 @@ actor {
     rates;
   };
 
-  func getLatestFundingRateSync(exchange : Text) : Float {
+  // Open Interest
+  func getLatestOpenInterestSync(exchange : Text) : Float {
     switch (marketSnapshots.get(exchange)) {
       case (null) { 0.0 };
       case (?buffer) {
         if (buffer.size() > 0) {
           switch (buffer.last()) {
             case (null) { 0.0 };
-            case (?snapshot) { snapshot.fundingRate };
+            case (?snapshot) { snapshot.openInterest };
           };
         } else {
           0.0;
@@ -271,22 +293,7 @@ actor {
     ois;
   };
 
-  func getLatestOpenInterestSync(exchange : Text) : Float {
-    switch (marketSnapshots.get(exchange)) {
-      case (null) { 0.0 };
-      case (?buffer) {
-        if (buffer.size() > 0) {
-          switch (buffer.last()) {
-            case (null) { 0.0 };
-            case (?snapshot) { snapshot.openInterest };
-          };
-        } else {
-          0.0;
-        };
-      };
-    };
-  };
-
+  // Liquidations
   public query ({ caller }) func getLiquidations(limit : Nat) : async [LiquidationEvent] {
     let size = if (liquidationEvents.size() > limit) { limit } else {
       liquidationEvents.size();
@@ -298,6 +305,7 @@ actor {
     };
   };
 
+  // Exchange Flows
   public query ({ caller }) func getExchangeFlows(limit : Nat) : async [ExchangeFlow] {
     let size = if (exchangeFlows.size() > limit) { limit } else {
       exchangeFlows.size();
@@ -309,19 +317,7 @@ actor {
     };
   };
 
-  public query ({ caller }) func getOrderBookDepth() : async [(Text, OrderBookDepth)] {
-    let exchanges = marketSnapshots.keys().toArray();
-    let depths = exchanges.map(
-      func(exchange) {
-        switch (getLatestOrderBookSync(exchange)) {
-          case (null) { (exchange, emptyOrderBookForExchange(exchange)) };
-          case (?depth) { (exchange, depth) };
-        };
-      }
-    );
-    depths;
-  };
-
+  // Order Book Depth
   func getLatestOrderBookSync(exchange : Text) : ?OrderBookDepth {
     let filtered = orderBookDepths.toArray().filter(
       func(depth) { depth.exchange == exchange }
@@ -346,6 +342,20 @@ actor {
     };
   };
 
+  public query ({ caller }) func getOrderBookDepth() : async [(Text, OrderBookDepth)] {
+    let exchanges = marketSnapshots.keys().toArray();
+    let depths = exchanges.map(
+      func(exchange) {
+        switch (getLatestOrderBookSync(exchange)) {
+          case (null) { (exchange, emptyOrderBookForExchange(exchange)) };
+          case (?depth) { (exchange, depth) };
+        };
+      }
+    );
+    depths;
+  };
+
+  // Impulse Events
   public query ({ caller }) func getImpulseEvents(limit : Nat) : async [ImpulseEvent] {
     let size = if (impulseEvents.size() > limit) { limit } else {
       impulseEvents.size();
@@ -358,6 +368,7 @@ actor {
     };
   };
 
+  // Synchronized Events
   public query ({ caller }) func getSynchronizedImpulseEvents(limit : Nat) : async [SynchronizedImpulseEvent] {
     let size = if (synchronizedImpulseEvents.size() > limit) { limit } else {
       synchronizedImpulseEvents.size();
@@ -369,6 +380,7 @@ actor {
     };
   };
 
+  // Netflow History
   public query ({ caller }) func getNetflowHistory(exchange : Text, window : Text) : async [NetflowPoint] {
     let filtered = netflows.toArray().filter(
       func(flow) { flow.exchange == exchange }
@@ -390,10 +402,12 @@ actor {
     };
   };
 
+  // Liquidation Windows
   public query ({ caller }) func getLiquidationWindows() : async [LiquidationWindow] {
     liquidationWindows.toArray();
   };
 
+  // Spread Snapshot
   public query ({ caller }) func getSpreadSnapshot() : async ?SpreadSnapshot {
     if (spreadSnapshots.size() > 0) {
       switch (spreadSnapshots.last()) {
@@ -405,14 +419,17 @@ actor {
     };
   };
 
+  // Volume Metrics
   public query ({ caller }) func getVolumeMetrics() : async [VolumeMetric] {
     volumeMetrics.toArray();
   };
 
+  // Data Freshness
   public query ({ caller }) func getDataFreshness() : async [DataFreshnessRecord] {
     dataFreshness.toArray();
   };
 
+  // Liquidity Score
   public query ({ caller }) func getLiquidityScore() : async LiquidityScore {
     calculateLiquidityScoreSync();
   };
@@ -427,6 +444,7 @@ actor {
     };
   };
 
+  // Alerts
   public query ({ caller }) func getAlerts() : async [Alert] {
     alerts.toArray();
   };
@@ -442,6 +460,7 @@ actor {
     };
   };
 
+  // Replay
   public query ({ caller }) func getEventReplay(impulseEventId : Nat) : async EventReplay {
     {
       event = null;
@@ -530,5 +549,8 @@ actor {
   public shared ({ caller }) func init() : async () {
     await startDataFetching();
   };
-};
 
+  // System Timers (auto-start after deploy)
+  ignore Timer.setTimer<system>(#seconds 5, func() : async () { await fetchDataCycle() }); // Changed to setTimer
+  ignore Timer.recurringTimer<system>(#seconds 60, func() : async () { await fetchDataCycle() });
+};

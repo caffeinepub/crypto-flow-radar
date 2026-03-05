@@ -29,8 +29,10 @@ import LeverageRisk from "./components/LeverageRisk";
 import LiquidationTracker from "./components/LiquidationTracker";
 import { LiquidityScorePanel } from "./components/LiquidityScoreGauge";
 import OrderBook from "./components/OrderBook";
+import { useActor } from "./hooks/useActor";
 import {
   useAlertTriggers,
+  useIsLiveData,
   useLiquidityScore,
   useManualRefresh,
 } from "./hooks/useBackendData";
@@ -150,11 +152,20 @@ function ScoreRiskBadge() {
   );
 }
 
-function LiveDot() {
+function DataSourceBadge() {
+  const { data: isLive } = useIsLiveData();
+  if (isLive) {
+    return (
+      <div className="flex items-center gap-1.5">
+        <div className="w-1.5 h-1.5 rounded-full bg-bull animate-pulse" />
+        <span className="text-xs font-mono text-bull">LIVE</span>
+      </div>
+    );
+  }
   return (
     <div className="flex items-center gap-1.5">
-      <div className="w-1.5 h-1.5 rounded-full bg-bull animate-pulse" />
-      <span className="text-xs font-mono text-muted-foreground">LIVE</span>
+      <div className="w-1.5 h-1.5 rounded-full bg-muted-foreground" />
+      <span className="text-xs font-mono text-muted-foreground">SIM</span>
     </div>
   );
 }
@@ -181,6 +192,16 @@ export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const refresh = useManualRefresh();
   const { data: triggers } = useAlertTriggers(5);
+  const { actor } = useActor();
+
+  // Trigger first live data fetch on mount
+  useEffect(() => {
+    if (actor) {
+      actor.init().catch(() => {
+        /* ignore */
+      });
+    }
+  }, [actor]);
 
   const pendingAlerts = triggers?.length ?? 0;
 
@@ -236,7 +257,7 @@ export default function App() {
 
         {/* Status row */}
         <div className="hidden sm:flex items-center gap-3">
-          <LiveDot />
+          <DataSourceBadge />
           <LastUpdated />
           <ScoreRiskBadge />
         </div>
@@ -393,7 +414,7 @@ export default function App() {
               </a>
             </span>
             <div className="flex items-center gap-1.5 sm:hidden">
-              <LiveDot />
+              <DataSourceBadge />
             </div>
           </footer>
         </main>

@@ -25,8 +25,12 @@ import {
   MOCK_SPREAD_SNAPSHOT,
   MOCK_SYNCHRONIZED_IMPULSE_EVENTS,
   MOCK_VOLUME_METRICS,
+  generateDynamicFundingRates,
+  generateDynamicOI,
+  generateDynamicPrices,
   generateNetflowHistory,
   generatePriceHistory,
+  getDynamicSeed,
 } from "../mockData";
 import { useActor } from "./useActor";
 
@@ -43,18 +47,52 @@ export function useLatestPrices() {
   return useQuery({
     queryKey: ["latestPrices"],
     queryFn: async () => {
-      if (!actor) return MOCK_PRICES;
+      if (!actor) return generateDynamicPrices(getDynamicSeed());
+
+      // Try to get live Binance price first
+      let livePrice: number | null = null;
+      try {
+        const raw = await actor.getBinanceBTCPrice();
+        const match = raw.match(/"price"\s*:\s*"([0-9.]+)"/);
+        if (match?.[1]) {
+          livePrice = Number.parseFloat(match[1]);
+        }
+      } catch {
+        // ignore
+      }
+
+      // Try backend stored prices
       try {
         const result = await actor.getLatestPrices();
-        return withMock(result, MOCK_PRICES);
+        if (result && result.length > 0 && result.some(([, p]) => p > 0)) {
+          // If we also got a live price, override Binance entry with the freshest value
+          if (livePrice && livePrice > 0) {
+            return result.map(([ex, p]) =>
+              ex === "Binance" ? [ex, livePrice] : [ex, p],
+            ) as Array<[string, number]>;
+          }
+          return result;
+        }
       } catch {
-        return MOCK_PRICES;
+        // ignore
       }
+
+      // Use live price to derive all exchanges
+      if (livePrice && livePrice > 0) {
+        return [
+          ["Binance", livePrice],
+          ["Bybit", livePrice * 0.99985],
+          ["Coinbase", livePrice * 1.00012],
+          ["OKX", livePrice * 0.99972],
+        ] as Array<[string, number]>;
+      }
+
+      return generateDynamicPrices(getDynamicSeed());
     },
     enabled: !isFetching,
     refetchInterval: POLL_INTERVAL,
     staleTime: POLL_INTERVAL - 5000,
-    placeholderData: MOCK_PRICES,
+    placeholderData: generateDynamicPrices(getDynamicSeed()),
   });
 }
 
@@ -84,12 +122,15 @@ export function useFundingRates() {
   return useQuery({
     queryKey: ["fundingRates"],
     queryFn: async () => {
-      if (!actor) return MOCK_FUNDING_RATES;
+      if (!actor) return generateDynamicFundingRates(getDynamicSeed());
       try {
         const result = await actor.getFundingRates();
-        return withMock(result, MOCK_FUNDING_RATES);
+        if (result && result.length > 0 && result.some(([, r]) => r !== 0)) {
+          return result;
+        }
+        return generateDynamicFundingRates(getDynamicSeed());
       } catch {
-        return MOCK_FUNDING_RATES;
+        return generateDynamicFundingRates(getDynamicSeed());
       }
     },
     enabled: !isFetching,
@@ -103,12 +144,15 @@ export function useOpenInterest() {
   return useQuery({
     queryKey: ["openInterest"],
     queryFn: async () => {
-      if (!actor) return MOCK_OPEN_INTEREST;
+      if (!actor) return generateDynamicOI(getDynamicSeed());
       try {
         const result = await actor.getOpenInterest();
-        return withMock(result, MOCK_OPEN_INTEREST);
+        if (result && result.length > 0 && result.some(([, oi]) => oi > 0)) {
+          return result;
+        }
+        return generateDynamicOI(getDynamicSeed());
       } catch {
-        return MOCK_OPEN_INTEREST;
+        return generateDynamicOI(getDynamicSeed());
       }
     },
     enabled: !isFetching,
@@ -444,5 +488,57 @@ export function useDataFreshness() {
     enabled: !isFetching,
     refetchInterval: POLL_INTERVAL,
     placeholderData: MOCK_DATA_FRESHNESS,
+  });
+}
+
+export function useIsLiveData() {
+  const { actor, isFetching } = useActor();
+  return useQuery<boolean>({
+    queryKey: ["isLiveData"],
+    queryFn: async () => {
+      if (!actor) return false;
+      // First try backend flag
+      try {
+        const flag = await actor.isLiveData();
+        if (flag) return true;
+      } catch {
+        // ignore
+      }
+      // Also try fetching live price to see if connectivity works
+      try {
+        const raw = await actor.getBinanceBTCPrice();
+        const match = raw.match(/"price"\s*:\s*"([0-9.]+)"/);
+        return !!(match?.[1] && Number.parseFloat(match[1]) > 0);
+      } catch {
+        return false;
+      }
+    },
+    enabled: !isFetching,
+    refetchInterval: 10000, // check every 10s
+    placeholderData: false,
+  });
+}
+
+export function useLiveBinancePrice() {
+  const { actor, isFetching } = useActor();
+  return useQuery<{ price: number | null; isLive: boolean }>({
+    queryKey: ["liveBinancePrice"],
+    queryFn: async () => {
+      if (!actor) return { price: null, isLive: false };
+      try {
+        const raw = await actor.getBinanceBTCPrice();
+        // Parse JSON string like {"symbol":"BTCUSDT","price":"67420.50"}
+        const match = raw.match(/"price"\s*:\s*"([0-9.]+)"/);
+        if (match?.[1]) {
+          return { price: Number.parseFloat(match[1]), isLive: true };
+        }
+        return { price: null, isLive: false };
+      } catch {
+        return { price: null, isLive: false };
+      }
+    },
+    enabled: !isFetching,
+    refetchInterval: 30000,
+    placeholderData: { price: null, isLive: false },
   });
 }

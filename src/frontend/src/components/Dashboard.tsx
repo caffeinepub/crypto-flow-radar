@@ -2,7 +2,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Activity, DollarSign, TrendingDown, TrendingUp } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Area,
   AreaChart,
@@ -15,6 +15,7 @@ import {
 import {
   useDataFreshness,
   useFundingRates,
+  useIsLiveData,
   useLatestPrices,
   useLiquidations,
   useLiquidityScore,
@@ -181,6 +182,7 @@ export default function Dashboard() {
   const { data: liquidityScore } = useLiquidityScore();
   const { data: volumeMetrics } = useVolumeMetrics();
   const { data: freshness } = useDataFreshness();
+  const { data: isLive } = useIsLiveData();
 
   const chartData = useMemo(
     () => generatePriceChartData(timeframe),
@@ -192,15 +194,20 @@ export default function Dashboard() {
     return openInterest.reduce((sum, [, oi]) => sum + oi, 0);
   }, [openInterest]);
 
-  const prevPrices = useMemo(() => {
-    const base: Record<string, number> = {
-      Binance: 67200,
-      Bybit: 67195,
-      Coinbase: 67210,
-      OKX: 67185,
-    };
-    return base;
-  }, []);
+  // Track previous prices so % change reflects real movement, not a hardcoded baseline
+  const prevPricesRef = useRef<Record<string, number>>({});
+  const [prevPrices, setPrevPrices] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    if (!prices || prices.length === 0) return;
+    const currentMap: Record<string, number> = {};
+    for (const [ex, p] of prices) currentMap[ex] = p;
+    // Capture current as "prev" before updating the ref
+    if (Object.keys(prevPricesRef.current).length > 0) {
+      setPrevPrices({ ...prevPricesRef.current });
+    }
+    prevPricesRef.current = currentMap;
+  }, [prices]);
 
   // Volume metrics map
   const volumeMap = useMemo(() => {
@@ -235,6 +242,25 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-4">
+      {/* Data source banner */}
+      {isLive ? (
+        <div className="mb-3 px-3 py-2 rounded border border-bull/30 bg-bull/10 text-xs font-mono text-bull flex items-center gap-2">
+          <span className="w-1.5 h-1.5 rounded-full bg-bull animate-pulse inline-block" />
+          <span>
+            Live BTC price from Binance · Derivatives and flow metrics are
+            estimated
+          </span>
+        </div>
+      ) : (
+        <div className="mb-3 px-3 py-2 rounded border border-muted-foreground/20 bg-muted/20 text-xs font-mono text-muted-foreground flex items-center gap-2">
+          <span>⏳</span>
+          <span>
+            Connecting to Binance... live price loads within ~30 seconds of
+            first visit
+          </span>
+        </div>
+      )}
+
       {/* Price Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {pricesLoading
@@ -246,7 +272,7 @@ export default function Dashboard() {
                 key={exchange}
                 exchange={exchange}
                 price={price}
-                prevPrice={prevPrices[exchange] ?? price * 0.99}
+                prevPrice={prevPrices[exchange] ?? price * 0.999}
                 volumeMetric={volumeMap[exchange]}
                 freshness={priceFreshnessMap[exchange]}
               />

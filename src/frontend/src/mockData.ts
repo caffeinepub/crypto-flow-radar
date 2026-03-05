@@ -826,3 +826,43 @@ export function timeAgo(ts: bigint): string {
   if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`;
   return `${Math.floor(diff / 86400000)}d ago`;
 }
+
+// ── DYNAMIC MOCK DATA (time-seeded, changes every 30s) ──────────
+
+/** Returns a seed that changes every 30 seconds — use to simulate live feed variance */
+export function getDynamicSeed(): number {
+  return Math.floor(Date.now() / 30000);
+}
+
+export function generateDynamicPrices(seed: number): Array<[string, number]> {
+  const base = 67420 + (((seed * 9301 + 49297) % 233280) / 233280 - 0.5) * 800;
+  return [
+    ["Binance", Math.round(base * 10) / 10],
+    ["Bybit", Math.round(base * 0.99985 * 10) / 10],
+    ["Coinbase", Math.round(base * 1.00012 * 10) / 10],
+    ["OKX", Math.round(base * 0.99972 * 10) / 10],
+  ];
+}
+
+export function generateDynamicFundingRates(
+  seed: number,
+): Array<[string, number]> {
+  const base = 0.00045 + (((seed * 1234 + 5678) % 10000) / 10000) * 0.0008;
+  return [
+    ["Binance", Math.round(base * 1000000) / 1000000],
+    ["Bybit", Math.round(base * 1.07 * 1000000) / 1000000],
+    ["Coinbase", Math.round(base * 0.14 * 1000000) / 1000000],
+    ["OKX", Math.round(base * 0.92 * 1000000) / 1000000],
+  ];
+}
+
+export function generateDynamicOI(seed: number): Array<[string, number]> {
+  const base =
+    14_000_000_000 + (((seed * 7919 + 3571) % 100000) / 100000) * 3_000_000_000;
+  return [
+    ["Binance", Math.round(base * 0.47)],
+    ["Bybit", Math.round(base * 0.26)],
+    ["Coinbase", Math.round(base * 0.13)],
+    ["OKX", Math.round(base * 0.14)],
+  ];
+}

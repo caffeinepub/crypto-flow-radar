@@ -140,7 +140,6 @@ export const TransformationOutput = IDL.Record({
 
 export const idlService = IDL.Service({
   'addAlert' : IDL.Func([IDL.Text, Float, IDL.Text], [IDL.Nat], []),
-  'auth' : IDL.Func([IDL.Vec(IDL.Nat8)], [], ['query']),
   'deleteAlert' : IDL.Func([IDL.Nat], [IDL.Bool], []),
   'fetchDataCycle' : IDL.Func([], [], []),
   'getAlertTriggers' : IDL.Func([IDL.Nat], [IDL.Vec(AlertTrigger)], ['query']),
@@ -155,11 +154,7 @@ export const idlService = IDL.Service({
       ['query'],
     ),
   'getImpulseEvents' : IDL.Func([IDL.Nat], [IDL.Vec(ImpulseEvent)], ['query']),
-  'getLatestPrices' : IDL.Func(
-      [],
-      [IDL.Vec(IDL.Tuple(IDL.Text, Float))],
-      ['query'],
-    ),
+  'getLatestPrices' : IDL.Func([], [IDL.Vec(IDL.Tuple(IDL.Text, Float))], []),
   'getLiquidationWindows' : IDL.Func(
       [],
       [IDL.Vec(LiquidationWindow)],
@@ -199,6 +194,7 @@ export const idlService = IDL.Service({
     ),
   'getVolumeMetrics' : IDL.Func([], [IDL.Vec(VolumeMetric)], ['query']),
   'init' : IDL.Func([], [], []),
+  'isLiveData' : IDL.Func([], [IDL.Bool], []),
   'startDataFetching' : IDL.Func([], [], []),
   'transformHttpResponse' : IDL.Func(
       [TransformationInput],
@@ -341,7 +337,6 @@ export const idlFactory = ({ IDL }) => {
   
   return IDL.Service({
     'addAlert' : IDL.Func([IDL.Text, Float, IDL.Text], [IDL.Nat], []),
-    'auth' : IDL.Func([IDL.Vec(IDL.Nat8)], [], ['query']),
     'deleteAlert' : IDL.Func([IDL.Nat], [IDL.Bool], []),
     'fetchDataCycle' : IDL.Func([], [], []),
     'getAlertTriggers' : IDL.Func(
@@ -372,11 +367,7 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Vec(ImpulseEvent)],
         ['query'],
       ),
-    'getLatestPrices' : IDL.Func(
-        [],
-        [IDL.Vec(IDL.Tuple(IDL.Text, Float))],
-        ['query'],
-      ),
+    'getLatestPrices' : IDL.Func([], [IDL.Vec(IDL.Tuple(IDL.Text, Float))], []),
     'getLiquidationWindows' : IDL.Func(
         [],
         [IDL.Vec(LiquidationWindow)],
@@ -416,6 +407,7 @@ export const idlFactory = ({ IDL }) => {
       ),
     'getVolumeMetrics' : IDL.Func([], [IDL.Vec(VolumeMetric)], ['query']),
     'init' : IDL.Func([], [], []),
+    'isLiveData' : IDL.Func([], [IDL.Bool], []),
     'startDataFetching' : IDL.Func([], [], []),
     'transformHttpResponse' : IDL.Func(
         [TransformationInput],

@@ -138,7 +138,6 @@ export interface http_request_result {
 }
 export interface _SERVICE {
   'addAlert' : ActorMethod<[string, Float, string], bigint>,
-  'auth' : ActorMethod<[Uint8Array], undefined>,
   'deleteAlert' : ActorMethod<[bigint], boolean>,
   'fetchDataCycle' : ActorMethod<[], undefined>,
   'getAlertTriggers' : ActorMethod<[bigint], Array<AlertTrigger>>,
@@ -164,6 +163,7 @@ export interface _SERVICE {
   >,
   'getVolumeMetrics' : ActorMethod<[], Array<VolumeMetric>>,
   'init' : ActorMethod<[], undefined>,
+  'isLiveData' : ActorMethod<[], boolean>,
   'startDataFetching' : ActorMethod<[], undefined>,
   'transformHttpResponse' : ActorMethod<
     [TransformationInput],

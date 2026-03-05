@@ -220,7 +220,6 @@ export interface ImpulseEvent {
 }
 export interface backendInterface {
     addAlert(alertType: string, threshold: Float, note: string): Promise<bigint>;
-    auth(caller: Uint8Array): Promise<void>;
     deleteAlert(id: bigint): Promise<boolean>;
     fetchDataCycle(): Promise<void>;
     getAlertTriggers(limit: bigint): Promise<Array<AlertTrigger>>;
@@ -243,6 +242,7 @@ export interface backendInterface {
     getSynchronizedImpulseEvents(limit: bigint): Promise<Array<SynchronizedImpulseEvent>>;
     getVolumeMetrics(): Promise<Array<VolumeMetric>>;
     init(): Promise<void>;
+    isLiveData(): Promise<boolean>;
     startDataFetching(): Promise<void>;
     transformHttpResponse(input: TransformationInput): Promise<TransformationOutput>;
     triggerManualRefresh(): Promise<string>;
@@ -262,20 +262,6 @@ export class Backend implements backendInterface {
             }
         } else {
             const result = await this.actor.addAlert(arg0, arg1, arg2);
-            return result;
-        }
-    }
-    async auth(arg0: Uint8Array): Promise<void> {
-        if (this.processError) {
-            try {
-                const result = await this.actor.auth(arg0);
-                return result;
-            } catch (e) {
-                this.processError(e);
-                throw new Error("unreachable");
-            }
-        } else {
-            const result = await this.actor.auth(arg0);
             return result;
         }
     }
@@ -584,6 +570,20 @@ export class Backend implements backendInterface {
             }
         } else {
             const result = await this.actor.init();
+            return result;
+        }
+    }
+    async isLiveData(): Promise<boolean> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.isLiveData();
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.isLiveData();
             return result;
         }
     }
